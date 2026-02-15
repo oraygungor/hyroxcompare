@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HYROX Canlı Karşılaştırma Aracı</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Teko:wght@300;400;600;700&family=Roboto:wght@300;400;500;700&display=swap');
+        body { font-family: 'Roboto', sans-serif; background-color: #0f172a; color: #e2e8f0; }
+        .font-sport { font-family: 'Teko', sans-serif; }
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        .winner-cell { background-color: rgba(34, 197, 94, 0.2); border: 1px solid #22c55e; color: #4ade80; font-weight: bold; }
+        .loading-spinner { border: 4px solid rgba(255,255,255,0.1); border-left-color: #fbbf24; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+    <!-- Header -->
+    <div class="max-w-7xl mx-auto mb-8 text-center">
+        <h1 class="text-5xl md:text-7xl font-sport font-bold text-yellow-500 tracking-wider uppercase drop-shadow-lg">HYROX ARENA</h1>
+        <p class="text-gray-400 mt-2">Linkleri yapıştırın, performansları anlık kıyaslayın.</p>
+    </div>
+
+    <!-- Input Section -->
+    <div class="max-w-3xl mx-auto mb-10 glass-panel p-6 rounded-xl shadow-2xl">
+        <div class="flex flex-col md:flex-row gap-4">
+            <input type="text" id="urlInput" placeholder="https://www.hyresult.com/result/..." 
+                class="flex-1 bg-slate-800 border border-slate-600 text-white px-4 py-3 rounded-lg focus:outline-none focus:border-yellow-500 transition-colors">
+            <button onclick="addAthlete()" id="addButton"
+                class="bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold px-8 py-3 rounded-lg transition-transform active:scale-95 flex items-center justify-center gap-2">
+                <i class="fas fa-plus"></i> SPORCU EKLE
+            </button>
+        </div>
+        <p id="statusMsg" class="text-sm mt-3 text-gray-400 h-5"></p>
+        <div class="mt-4 text-xs text-gray-500">
+            <i class="fas fa-info-circle"></i> Örnek Link: https://www.hyresult.com/result/LR3MS4JI46E016
+        </div>
+    </div>
+
+    <!-- Athletes Chips (Remove capability) -->
+    <div id="athletesList" class="max-w-7xl mx-auto mb-6 flex flex-wrap gap-4 justify-center">
+        <!-- Chips will be added here -->
+    </div>
+
+    <!-- Comparison Table -->
+    <div class="max-w-7xl mx-auto overflow-x-auto rounded-xl shadow-2xl glass-panel hidden" id="comparisonContainer">
+        <table class="w-full text-left border-collapse">
+            <thead>
+                <tr class="bg-slate-800 text-gray-400 uppercase text-sm tracking-wider border-b border-slate-700">
+                    <th class="p-4 w-48 sticky left-0 bg-slate-800 z-10 border-r border-slate-700">İstasyon</th>
+                    <!-- Athlete headers will be injected here -->
+                </tr>
+            </thead>
+            <tbody id="comparisonBody">
+                <!-- Data rows will be injected here -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // State
+        const athletes = [];
+        const stations = [
+            { key: "SkiErg", label: "1000m SkiErg", icon: "fa-skiing" },
+            { key: "Sled Push", label: "50m Sled Push", icon: "fa-dolly-flatbed" },
+            { key: "Sled Pull", label: "50m Sled Pull", icon: "fa-anchor" }, // Anchor as proxy for rope
+            { key: "Burpee Broad Jump", label: "80m Burpee Jump", icon: "fa-frog" },
+            { key: "Row", label: "1000m Row", icon: "fa-water" },
+            { key: "Farmers Carry", label: "200m Farmers Carry", icon: "fa-weight-hanging" },
+            { key: "Sandbag Lunges", label: "100m Sandbag", icon: "fa-walking" },
+            { key: "Wall Balls", label: "Wall Balls", icon: "fa-basketball-ball" },
+            { key: "Total", label: "TOPLAM SÜRE", icon: "fa-stopwatch" }
+        ];
+
+        // Helper: Parse time string to seconds (MM:SS or HH:MM:SS)
+        function timeToSeconds(timeStr) {
+            if (!timeStr) return Infinity;
+            const parts = timeStr.split(':').map(Number);
+            if (parts.length === 2) return parts[0] * 60 + parts[1];
+            if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+            return Infinity;
+        }
+
+        // Helper: Format seconds back to MM:SS
+        function secondsToTime(totalSeconds) {
+            if (totalSeconds === Infinity || isNaN(totalSeconds)) return "-";
+            const h = Math.floor(totalSeconds / 3600);
+            const m = Math.floor((totalSeconds % 3600) / 60);
+            const s = totalSeconds % 60;
+            
+            const pad = (n) => n.toString().padStart(2, '0');
+            if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+            return `${pad(m)}:${pad(s)}`;
+        }
+
+        async function fetchHyroxData(url) {
+            // Using a CORS proxy to bypass browser restrictions
+            // 'allorigins' is a free public proxy.
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}&disableCache=true`;
+            
+            try {
+                const response = await fetch(proxyUrl);
+                if (!response.ok) throw new Error("Veri çekilemedi");
+                const html = await response.text();
+                return parseHtml(html, url);
+            } catch (error) {
+                console.error(error);
+                return null;
+            }
+        }
+
+        function parseHtml(html, sourceUrl) {
+            const data = {};
+            
+            // 1. Try to find Athlete Name
+            // Usually in title: <title>HYROX race analysis for Oray Gungor at...</title>
+            const titleMatch = html.match(/<title>(.*?)<\/title>/i);
+            let name = "Sporcu " + (athletes.length + 1);
+            if (titleMatch) {
+                const parts = titleMatch[1].split(' at ');
+                if (parts.length > 0) {
+                    name = parts[0].replace('HYROX race analysis for ', '').trim();
+                }
+            }
+
+            // 2. Extract Times using Regex logic similar to Python script
+            stations.forEach(station => {
+                // Regex: Station Name + up to 800 chars + Time Format
+                // We look for patterns like: >04:19< or "04:19"
+                const escapedKey = station.key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                
+                // Find index of station
+                const regexStation = new RegExp(escapedKey, 'i');
+                const matchStation = html.match(regexStation);
+                
+                if (matchStation) {
+                    const snippet = html.substring(matchStation.index, matchStation.index + 1200);
+                    
+                    // Find all time-like strings in the snippet
+                    const timeRegex = /(?:\>|\s|")(\d{1,2}:\d{2}(?::\d{2})?)(?:\<|\s|")/g;
+                    let timeMatch;
+                    const candidates = [];
+
+                    while ((timeMatch = timeRegex.exec(snippet)) !== null) {
+                        candidates.push(timeMatch[1]);
+                    }
+
+                    // Smart Filter
+                    let bestTime = "-";
+                    let minValidSeconds = Infinity;
+
+                    for (const t of candidates) {
+                        const sec = timeToSeconds(t);
+                        // Filter logic:
+                        // < 10 seconds: likely a diff
+                        // > 3600 seconds (1 hour): likely Start Time (except for Total)
+                        // For Total time, we allow > 1 hour.
+                        
+                        const maxLimit = (station.key === "Total") ? 10800 : 3600; // 3 hours for total, 1 hour for splits
+                        
+                        if (sec > 10 && sec < maxLimit) {
+                            // We prefer the *first* valid logical duration found usually,
+                            // OR for duplicate valid ones, usually the raw time is consistent.
+                            if (bestTime === "-") {
+                                bestTime = t;
+                                minValidSeconds = sec;
+                            }
+                        }
+                    }
+                    data[station.key] = bestTime;
+                } else {
+                    data[station.key] = "-";
+                }
+            });
+
+            return { name, times: data, url: sourceUrl, id: Date.now() };
+        }
+
+        async function addAthlete() {
+            const input = document.getElementById('urlInput');
+            const btn = document.getElementById('addButton');
+            const status = document.getElementById('statusMsg');
+            const url = input.value.trim();
+
+            if (!url) return;
+
+            // UI Loading State
+            btn.innerHTML = `<div class="loading-spinner"></div>`;
+            btn.disabled = true;
+            status.innerHTML = `<span class="text-yellow-500">Veriler Hyresult üzerinden çekiliyor... (Proxy aracılığıyla)</span>`;
+
+            const athleteData = await fetchHyroxData(url);
+
+            if (athleteData) {
+                athletes.push(athleteData);
+                renderAthletes();
+                renderTable();
+                status.innerHTML = `<span class="text-green-500">Başarılı! ${athleteData.name} eklendi.</span>`;
+                input.value = "";
+            } else {
+                status.innerHTML = `<span class="text-red-500">Hata: Veri çekilemedi. Linki kontrol edin veya site bot korumasında olabilir.</span>`;
+            }
+
+            // Reset UI
+            btn.innerHTML = `<i class="fas fa-plus"></i> SPORCU EKLE`;
+            btn.disabled = false;
+        }
+
+        function removeAthlete(id) {
+            const index = athletes.findIndex(a => a.id === id);
+            if (index > -1) {
+                athletes.splice(index, 1);
+                renderAthletes();
+                renderTable();
+            }
+        }
+
+        function renderAthletes() {
+            const list = document.getElementById('athletesList');
+            list.innerHTML = athletes.map(a => `
+                <div class="bg-slate-700 px-4 py-2 rounded-full flex items-center gap-3 border border-slate-600 shadow-lg animate-fade-in">
+                    <span class="font-bold text-white">${a.name}</span>
+                    <button onclick="removeAthlete(${a.id})" class="text-gray-400 hover:text-red-400">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `).join('');
+            
+            document.getElementById('comparisonContainer').classList.remove('hidden');
+            if (athletes.length === 0) document.getElementById('comparisonContainer').classList.add('hidden');
+        }
+
+        function renderTable() {
+            const thead = document.querySelector('thead tr');
+            const tbody = document.getElementById('comparisonBody');
+
+            // 1. Rebuild Header
+            let headerHtml = `<th class="p-4 w-48 sticky left-0 bg-slate-800 z-10 border-r border-slate-700 border-b">İstasyon</th>`;
+            athletes.forEach(a => {
+                headerHtml += `<th class="p-4 text-center border-b border-slate-700 min-w-[150px]">${a.name}</th>`;
+            });
+            thead.innerHTML = headerHtml;
+
+            // 2. Rebuild Body
+            let bodyHtml = "";
+
+            stations.forEach(station => {
+                // Determine winner (fastest time) for this station
+                let minSec = Infinity;
+                athletes.forEach(a => {
+                    const s = timeToSeconds(a.times[station.key]);
+                    if (s < minSec) minSec = s;
+                });
+
+                bodyHtml += `<tr class="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">`;
+                
+                // Station Label
+                bodyHtml += `
+                    <td class="p-4 sticky left-0 bg-slate-800 z-10 border-r border-slate-700 font-medium flex items-center gap-3">
+                        <div class="w-8 h-8 rounded bg-slate-700 text-yellow-500 flex items-center justify-center shrink-0">
+                            <i class="fas ${station.icon}"></i>
+                        </div>
+                        <span class="${station.key === 'Total' ? 'text-yellow-400 font-bold' : 'text-gray-300'}">${station.label}</span>
+                    </td>
+                `;
+
+                // Athlete Times
+                athletes.forEach(a => {
+                    const timeStr = a.times[station.key];
+                    const seconds = timeToSeconds(timeStr);
+                    const isWinner = (seconds === minSec && seconds !== Infinity && athletes.length > 1);
+                    
+                    // Visual Bar Calculation (relative to 10 mins or max time)
+                    // For visualization, let's say max usually 10 mins (600s) for stations, 90m for total
+                    const maxRef = station.key === 'Total' ? 5400 : 600; 
+                    const percent = Math.min(100, Math.max(0, (seconds / maxRef) * 100));
+                    
+                    bodyHtml += `
+                        <td class="p-4 text-center ${isWinner ? 'winner-cell' : ''}">
+                            <div class="text-xl font-sport tracking-wide">${timeStr}</div>
+                            ${timeStr !== '-' ? `
+                                <div class="w-full bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden opacity-50">
+                                    <div class="${isWinner ? 'bg-green-500' : 'bg-yellow-500'}" style="width: ${percent}%; height: 100%"></div>
+                                </div>
+                            ` : ''}
+                            ${isWinner ? '<div class="text-[10px] mt-1 text-green-400 uppercase tracking-wider font-bold">En Hızlı</div>' : ''}
+                        </td>
+                    `;
+                });
+
+                bodyHtml += `</tr>`;
+            });
+
+            tbody.innerHTML = bodyHtml;
+        }
+    </script>
+</body>
+</html>
