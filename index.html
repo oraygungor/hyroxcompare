@@ -98,19 +98,41 @@
         }
 
         async function fetchHyroxData(url) {
-            // Using a CORS proxy to bypass browser restrictions
-            // 'allorigins' is a free public proxy.
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}&disableCache=true`;
+            // CORS hatasını aşmak için çoklu proxy stratejisi
+            // Birincisi başarısız olursa diğerleri denenir.
+            const proxies = [
+                // 1. corsproxy.io (Genellikle en stabil ve hızlı olan)
+                (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
+                // 2. allorigins.win (Yedek)
+                (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}&disableCache=true`,
+                // 3. thingproxy (Son çare)
+                (target) => `https://thingproxy.freeboard.io/fetch/${target}`
+            ];
             
-            try {
-                const response = await fetch(proxyUrl);
-                if (!response.ok) throw new Error("Veri çekilemedi");
-                const html = await response.text();
-                return parseHtml(html, url);
-            } catch (error) {
-                console.error(error);
-                return null;
+            for (const createProxyUrl of proxies) {
+                const proxyUrl = createProxyUrl(url);
+                try {
+                    console.log(`Veri çekiliyor: ${proxyUrl}`);
+                    const response = await fetch(proxyUrl);
+                    
+                    if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+                    
+                    const html = await response.text();
+                    
+                    // Basit doğrulama: Gelen veri HTML mi?
+                    if (!html || (!html.includes("<!DOCTYPE") && !html.includes("<html"))) {
+                        throw new Error("Geçersiz veri formatı");
+                    }
+
+                    return parseHtml(html, url);
+                } catch (error) {
+                    console.warn(`Proxy başarısız (${proxyUrl}):`, error);
+                    // Hata olsa bile döngü devam eder, bir sonraki proxy denenir
+                }
             }
+            
+            // Tüm proxy'ler başarısız olursa
+            return null;
         }
 
         function parseHtml(html, sourceUrl) {
@@ -223,7 +245,7 @@
                 status.innerHTML = `<span class="text-green-500">Başarılı! ${athleteData.name} eklendi.</span>`;
                 input.value = "";
             } else {
-                status.innerHTML = `<span class="text-red-500">Hata: Veri çekilemedi. Linki kontrol edin veya site bot korumasında olabilir.</span>`;
+                status.innerHTML = `<span class="text-red-500">Hata: Veri çekilemedi. Site proxy'leri engelliyor olabilir.</span>`;
             }
 
             // Reset UI
