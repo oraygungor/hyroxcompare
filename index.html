@@ -2,342 +2,397 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HYROX Canlı Karşılaştırma Aracı</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HYROX Pro Analiz</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Teko:wght@300;400;600;700&family=Roboto:wght@300;400;500;700&display=swap');
         body { font-family: 'Roboto', sans-serif; background-color: #0f172a; color: #e2e8f0; }
         .font-sport { font-family: 'Teko', sans-serif; }
-        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
-        .winner-cell { background-color: rgba(34, 197, 94, 0.2); border: 1px solid #22c55e; color: #4ade80; font-weight: bold; }
-        .loading-spinner { border: 4px solid rgba(255,255,255,0.1); border-left-color: #fbbf24; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .glass-panel { background: rgba(30, 41, 59, 0.95); border: 1px solid #334155; }
+        
+        /* Özelleştirilmiş Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        .winner-cell { 
+            background: linear-gradient(145deg, rgba(34, 197, 94, 0.15), rgba(34, 197, 94, 0.05));
+            border: 1px solid rgba(34, 197, 94, 0.4); 
+            box-shadow: 0 0 10px rgba(34, 197, 94, 0.1);
+        }
+        .loser-cell {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        /* Mobil tablo başlığı sabitleme */
+        .sticky-col {
+            position: sticky;
+            left: 0;
+            z-index: 20;
+            background-color: #0f172a; /* Arka plan rengiyle aynı olsun */
+        }
     </style>
 </head>
-<body class="min-h-screen p-4 md:p-8">
+<body class="min-h-screen flex flex-col p-3 md:p-8">
 
-    <!-- Header -->
-    <div class="max-w-7xl mx-auto mb-8 text-center">
-        <h1 class="text-5xl md:text-7xl font-sport font-bold text-yellow-500 tracking-wider uppercase drop-shadow-lg">HYROX ARENA</h1>
-        <p class="text-gray-400 mt-2">Linkleri yapıştırın, performansları anlık kıyaslayın.</p>
+    <!-- Başlık -->
+    <div class="text-center mb-6 md:mb-8 mt-2">
+        <h1 class="text-5xl md:text-7xl font-sport font-bold text-yellow-500 tracking-wider drop-shadow-lg">
+            HYROX <span class="text-white">LAB</span>
+        </h1>
+        <p class="text-gray-400 text-xs md:text-sm mt-1">Gelişmiş Performans Karşılaştırması</p>
     </div>
 
-    <!-- Input Section -->
-    <div class="max-w-3xl mx-auto mb-10 glass-panel p-6 rounded-xl shadow-2xl">
-        <div class="flex flex-col md:flex-row gap-4">
-            <input type="text" id="urlInput" placeholder="https://www.hyresult.com/result/..." 
-                class="flex-1 bg-slate-800 border border-slate-600 text-white px-4 py-3 rounded-lg focus:outline-none focus:border-yellow-500 transition-colors">
-            <button onclick="addAthlete()" id="addButton"
-                class="bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold px-8 py-3 rounded-lg transition-transform active:scale-95 flex items-center justify-center gap-2">
-                <i class="fas fa-plus"></i> SPORCU EKLE
+    <!-- Ana Kontrol Paneli -->
+    <div class="max-w-4xl mx-auto w-full mb-6">
+        <div class="glass-panel p-4 md:p-6 rounded-xl shadow-2xl flex flex-col md:flex-row gap-3 md:gap-4 items-center">
+            <div class="flex-1 w-full relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i class="fas fa-link text-slate-500"></i>
+                </div>
+                <input type="text" id="urlInput" 
+                    placeholder="https://www.hyresult.com/result/..." 
+                    class="w-full bg-slate-900 border border-slate-700 text-white pl-10 pr-4 py-3 md:py-4 rounded-lg focus:border-yellow-500 outline-none shadow-inner text-sm transition-colors"
+                    onkeypress="handleEnter(event)">
+            </div>
+            <button onclick="fetchAndAnalyze()" id="analyzeBtn"
+                class="w-full md:w-auto bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-slate-900 font-bold py-3 md:py-4 px-8 rounded-lg text-lg tracking-wide shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2 min-w-[160px]">
+                <i class="fas fa-bolt"></i> <span class="md:inline">ANALİZ ET</span>
             </button>
         </div>
-        <p id="statusMsg" class="text-sm mt-3 text-gray-400 h-5"></p>
-        <div class="mt-4 text-xs text-gray-500">
-            <i class="fas fa-info-circle"></i> Örnek Link: https://www.hyresult.com/result/LR3MS4JI46E016
+        <div id="statusLog" class="mt-2 text-center text-xs font-mono min-h-[20px]"></div>
+    </div>
+
+    <!-- Sporcu Listesi (Chips) -->
+    <div id="athletesChips" class="max-w-7xl mx-auto flex flex-wrap gap-3 justify-center mb-6 px-2"></div>
+
+    <!-- Sonuç Tablosu -->
+    <div class="max-w-7xl mx-auto w-full glass-panel rounded-xl shadow-xl overflow-hidden hidden mb-10" id="tableContainer">
+        <div class="flex justify-between items-center p-4 bg-slate-800/50 border-b border-slate-700">
+            <h2 class="text-base md:text-lg font-bold text-white flex items-center gap-2">
+                <i class="fas fa-stopwatch text-yellow-500"></i> Tur Analizi
+            </h2>
+            <button onclick="clearAthletes()" class="text-xs text-red-400 hover:text-white flex items-center gap-1 transition-colors px-3 py-1 rounded border border-red-900/30 hover:bg-red-500/20">
+                <i class="fas fa-trash-alt"></i> <span class="hidden sm:inline">Listeyi</span> Temizle
+            </button>
+        </div>
+        
+        <div class="overflow-x-auto pb-2"> <!-- Mobilde scroll için padding -->
+            <table class="w-full text-left border-collapse min-w-[600px]"> <!-- Min-width ekledik mobilde sıkışmasın -->
+                <thead>
+                    <tr id="tableHeaderRow" class="bg-slate-800 text-gray-400 uppercase text-xs tracking-wider">
+                        <th class="p-3 md:p-4 w-48 sticky-col border-r border-slate-700 shadow-lg text-yellow-500 bg-slate-900">
+                            <div class="flex items-center gap-2"><i class="fas fa-dumbbell"></i> İSTASYON</div>
+                        </th>
+                        <!-- Sporcu başlıkları buraya eklenecek -->
+                    </tr>
+                </thead>
+                <tbody id="comparisonBody" class="text-sm">
+                    <!-- Veriler buraya eklenecek -->
+                </tbody>
+            </table>
         </div>
     </div>
 
-    <!-- Athletes Chips (Remove capability) -->
-    <div id="athletesList" class="max-w-7xl mx-auto mb-6 flex flex-wrap gap-4 justify-center">
-        <!-- Chips will be added here -->
-    </div>
-
-    <!-- Comparison Table -->
-    <div class="max-w-7xl mx-auto overflow-x-auto rounded-xl shadow-2xl glass-panel hidden" id="comparisonContainer">
-        <table class="w-full text-left border-collapse">
-            <thead>
-                <tr class="bg-slate-800 text-gray-400 uppercase text-sm tracking-wider border-b border-slate-700">
-                    <th class="p-4 w-48 sticky left-0 bg-slate-800 z-10 border-r border-slate-700">İstasyon</th>
-                    <!-- Athlete headers will be injected here -->
-                </tr>
-            </thead>
-            <tbody id="comparisonBody">
-                <!-- Data rows will be injected here -->
-            </tbody>
-        </table>
-    </div>
+    <footer class="mt-auto pt-6 pb-4 text-center text-gray-600 text-[10px]">
+        Powered by CodeTabs Proxy & AI Analysis
+    </footer>
 
     <script>
-        // State
-        const athletes = [];
-        const stations = [
-            { key: "SkiErg", label: "1000m SkiErg", icon: "fa-skiing" },
-            { key: "Sled Push", label: "50m Sled Push", icon: "fa-dolly-flatbed" },
-            { key: "Sled Pull", label: "50m Sled Pull", icon: "fa-anchor" }, // Anchor as proxy for rope
-            { key: "Burpee Broad Jump", label: "80m Burpee Jump", icon: "fa-frog" },
-            { key: "Row", label: "1000m Row", icon: "fa-water" },
-            { key: "Farmers Carry", label: "200m Farmers Carry", icon: "fa-weight-hanging" },
-            { key: "Sandbag Lunges", label: "100m Sandbag", icon: "fa-walking" },
-            { key: "Wall Balls", label: "Wall Balls", icon: "fa-basketball-ball" },
-            { key: "Total", label: "TOPLAM SÜRE", icon: "fa-stopwatch" }
+        // --- VERİ YAPISI ---
+        let athletes = [];
+        
+        const jsonMapping = {
+            "1000m SkiErg": { key: "SkiErg", label: "1000m SkiErg", icon: "fa-skiing" },
+            "50m Sled Push": { key: "Sled Push", label: "50m Sled Push", icon: "fa-dolly-flatbed" },
+            "50m Sled Pull": { key: "Sled Pull", label: "50m Sled Pull", icon: "fa-anchor" },
+            "80m Burpee Broad Jump": { key: "Burpee Broad Jump", label: "80m Burpee Jump", icon: "fa-frog" },
+            "1000m Row": { key: "Row", label: "1000m Row", icon: "fa-water" },
+            "200m Farmers Carry": { key: "Farmers Carry", label: "200m Farmers Carry", icon: "fa-weight-hanging" },
+            "100m Sandbag Lunges": { key: "Sandbag Lunges", label: "100m Lunges", icon: "fa-walking" },
+            "Wall Balls": { key: "Wall Balls", label: "Wall Balls", icon: "fa-basketball-ball" }
+        };
+
+        const stationOrder = [
+            "SkiErg", "Sled Push", "Sled Pull", "Burpee Broad Jump", "Row", 
+            "Farmers Carry", "Sandbag Lunges", "Wall Balls"
         ];
 
-        // Helper: Parse time string to seconds (MM:SS or HH:MM:SS)
+        // --- YARDIMCI FONKSİYONLAR ---
+
+        function formatSeconds(sec) {
+            if (!sec || isNaN(sec) || sec === Infinity) return "-";
+            const m = Math.floor(sec / 60);
+            const s = Math.floor(sec % 60);
+            return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+        }
+
+        function formatDiff(sec) {
+            if (!sec || isNaN(sec)) return "";
+            const m = Math.floor(sec / 60);
+            const s = Math.floor(sec % 60);
+            return `+${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+        }
+
         function timeToSeconds(timeStr) {
-            if (!timeStr) return Infinity;
+            if (!timeStr || timeStr === "-") return Infinity;
             const parts = timeStr.split(':').map(Number);
-            if (parts.length === 2) return parts[0] * 60 + parts[1];
             if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+            if (parts.length === 2) return parts[0] * 60 + parts[1];
             return Infinity;
         }
 
-        // Helper: Format seconds back to MM:SS
-        function secondsToTime(totalSeconds) {
-            if (totalSeconds === Infinity || isNaN(totalSeconds)) return "-";
-            const h = Math.floor(totalSeconds / 3600);
-            const m = Math.floor((totalSeconds % 3600) / 60);
-            const s = totalSeconds % 60;
+        function log(msg, type = 'info') {
+            const el = document.getElementById('statusLog');
+            el.innerHTML = msg;
             
-            const pad = (n) => n.toString().padStart(2, '0');
-            if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
-            return `${pad(m)}:${pad(s)}`;
+            if (type === 'error') el.className = "mt-3 text-center text-xs font-mono min-h-[20px] text-red-400";
+            else if (type === 'success') el.className = "mt-3 text-center text-xs font-mono min-h-[20px] text-green-400";
+            else el.className = "mt-3 text-center text-xs font-mono min-h-[20px] text-yellow-500";
         }
 
-        async function fetchHyroxData(url) {
-            // CORS hatasını aşmak için çoklu proxy stratejisi
-            // Birincisi başarısız olursa diğerleri denenir.
-            const proxies = [
-                // 1. corsproxy.io (Genellikle en stabil ve hızlı olan)
-                (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
-                // 2. allorigins.win (Yedek)
-                (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}&disableCache=true`,
-                // 3. thingproxy (Son çare)
-                (target) => `https://thingproxy.freeboard.io/fetch/${target}`
-            ];
-            
-            for (const createProxyUrl of proxies) {
-                const proxyUrl = createProxyUrl(url);
-                try {
-                    console.log(`Veri çekiliyor: ${proxyUrl}`);
-                    const response = await fetch(proxyUrl);
-                    
-                    if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
-                    
-                    const html = await response.text();
-                    
-                    // Basit doğrulama: Gelen veri HTML mi?
-                    if (!html || (!html.includes("<!DOCTYPE") && !html.includes("<html"))) {
-                        throw new Error("Geçersiz veri formatı");
-                    }
-
-                    return parseHtml(html, url);
-                } catch (error) {
-                    console.warn(`Proxy başarısız (${proxyUrl}):`, error);
-                    // Hata olsa bile döngü devam eder, bir sonraki proxy denenir
-                }
-            }
-            
-            // Tüm proxy'ler başarısız olursa
-            return null;
+        function handleEnter(e) {
+            if (e.key === 'Enter') fetchAndAnalyze();
         }
 
-        function parseHtml(html, sourceUrl) {
-            const data = {};
-            
-            // HTML'i DOM olarak parse et
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, "text/html");
+        // --- TEMEL İŞLEM ---
 
-            // 1. İsim Çekme (H1 etiketi en güvenilir yerdir)
-            let name = "Sporcu " + (athletes.length + 1);
-            const h1 = doc.querySelector('h1');
-            if (h1) {
-                name = h1.textContent.trim();
-            } else {
-                // Fallback: Title
-                const titleMatch = html.match(/<title>(.*?)<\/title>/i);
-                if (titleMatch) {
-                    const parts = titleMatch[1].split(' at ');
-                    if (parts.length > 0) {
-                        name = parts[0].replace('HYROX race analysis for ', '').trim();
-                    }
-                }
+        async function fetchAndAnalyze() {
+            let url = document.getElementById('urlInput').value.trim();
+            const btn = document.getElementById('analyzeBtn');
+
+            if (!url) {
+                log("Lütfen geçerli bir Hyrox linki girin.", "error");
+                return;
             }
 
-            // 2. Yarış Yeri/Yılı Çekme (Breadcrumb)
-            let eventName = "";
-            
-            // "/event/" ile başlayan ama içinde "?" (season linki) olmayan linki bul
-            const eventLink = Array.from(doc.querySelectorAll('a[href^="/event/"]'))
-                                   .find(a => !a.getAttribute('href').includes('?'));
-            
-            if (eventLink) {
-                // "Istanbul<!-- --> <!-- -->2026" gibi yapıları textContent temizler -> "Istanbul  2026"
-                eventName = eventLink.textContent.replace(/\s+/g, ' ').trim();
-            } else {
-                // Fallback: Title içinden bulmaya çalış
-                // "HYROX race analysis for Oray Gungor at Istanbul, Feb 13–14 • HYRESULT"
-                const titleContent = doc.querySelector('title')?.textContent || "";
-                const parts = titleContent.split(' at ');
-                if (parts.length > 1) {
-                    // "Istanbul, Feb 13–14 • HYRESULT"
-                    eventName = parts[1].split('•')[0].trim();
-                }
+            if (!url.includes("tab=")) {
+                url += (url.includes("?") ? "&" : "?") + "tab=workouts";
             }
 
-            // Görünen isim: "Oray Gungor (Istanbul 2026)"
-            const displayName = eventName ? `${name} (${eventName})` : name;
-
-            // 3. Süreleri Çekme (Regex ile - Raw HTML üzerinden devam ediyoruz çünkü en sağlam yöntem bu)
-            stations.forEach(station => {
-                const escapedKey = station.key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                
-                const regexStation = new RegExp(escapedKey, 'i');
-                const matchStation = html.match(regexStation);
-                
-                if (matchStation) {
-                    const snippet = html.substring(matchStation.index, matchStation.index + 1200);
-                    
-                    const timeRegex = /(?:\>|\s|")(\d{1,2}:\d{2}(?::\d{2})?)(?:\<|\s|")/g;
-                    let timeMatch;
-                    const candidates = [];
-
-                    while ((timeMatch = timeRegex.exec(snippet)) !== null) {
-                        candidates.push(timeMatch[1]);
-                    }
-
-                    let bestTime = "-";
-                    let minValidSeconds = Infinity;
-
-                    for (const t of candidates) {
-                        const sec = timeToSeconds(t);
-                        const maxLimit = (station.key === "Total") ? 10800 : 3600; 
-                        
-                        if (sec > 10 && sec < maxLimit) {
-                            if (bestTime === "-") {
-                                bestTime = t;
-                                minValidSeconds = sec;
-                            }
-                        }
-                    }
-                    data[station.key] = bestTime;
-                } else {
-                    data[station.key] = "-";
-                }
-            });
-
-            return { name: displayName, times: data, url: sourceUrl, id: Date.now() };
-        }
-
-        async function addAthlete() {
-            const input = document.getElementById('urlInput');
-            const btn = document.getElementById('addButton');
-            const status = document.getElementById('statusMsg');
-            const url = input.value.trim();
-
-            if (!url) return;
-
-            // UI Loading State
-            btn.innerHTML = `<div class="loading-spinner"></div>`;
             btn.disabled = true;
-            status.innerHTML = `<span class="text-yellow-500">Veriler Hyresult üzerinden çekiliyor... (Proxy aracılığıyla)</span>`;
+            btn.innerHTML = `<div class="loading-spinner border-2 w-5 h-5"></div>`; // Spinner boyutunu küçülttüm
+            log("Veriler sunucudan çekiliyor...", "info");
 
-            const athleteData = await fetchHyroxData(url);
+            try {
+                const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
+                const response = await fetch(proxyUrl);
+                
+                if (!response.ok) throw new Error(`Sunucu Hatası: ${response.status}`);
+                const html = await response.text();
+                
+                if (!html || (!html.includes("<!DOCTYPE") && !html.includes("<html"))) {
+                    throw new Error("Geçersiz veri formatı");
+                }
 
-            if (athleteData) {
-                athletes.push(athleteData);
-                renderAthletes();
-                renderTable();
-                status.innerHTML = `<span class="text-green-500">Başarılı! ${athleteData.name} eklendi.</span>`;
-                input.value = "";
-            } else {
-                status.innerHTML = `<span class="text-red-500">Hata: Veri çekilemedi. Site proxy'leri engelliyor olabilir.</span>`;
+                // --- DOM PARSING (Daha Güçlü Yöntem) ---
+                // HTML'i sanal bir DOM olarak yüklüyoruz
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, "text/html");
+
+                // 1. İsim Bulma (H1 veya Title)
+                let name = "Bilinmeyen Sporcu";
+                let eventName = "";
+
+                const h1 = doc.querySelector('h1');
+                if (h1) name = h1.textContent.trim();
+
+                // 2. Yarış Yeri ve Yılı (Breadcrumb veya Linklerden)
+                // Genellikle /event/ linkinde yazar: <a href="/event/s8-2026-istanbul">Istanbul 2026</a>
+                const eventLink = doc.querySelector('a[href^="/event/"]:not([href*="?"])');
+                
+                if (eventLink) {
+                    // İçeriği temizle (yorum satırlarını vs siler textContent)
+                    eventName = eventLink.textContent.replace(/\s+/g, ' ').trim();
+                } else {
+                    // Title yedeği
+                    const title = doc.querySelector('title')?.textContent || "";
+                    if (title.includes(" at ")) {
+                        eventName = title.split(" at ")[1].split(" • ")[0].trim();
+                    }
+                }
+
+                // Hata Kontrolü
+                if (html.includes("BardChatUi") || name.includes("Gemini")) {
+                    throw new Error("Proxy yanlış sayfa (Gemini) döndürdü. Lütfen tekrar deneyin.");
+                }
+
+                // 3. Veri Çıkarma (JSON Regex - Hala en güvenlisi)
+                const times = {};
+                let dataFound = false;
+                const regexPattern = /(?:\\"|")name(?:\\"|"):(?:\\"|")([^"]+?)(?:\\"|"),(?:.*?)(\\?)"time(?:\\"|"):(\d+)/g;
+                const matches = [...html.matchAll(regexPattern)];
+
+                matches.forEach(match => {
+                    const rawName = match[1]; 
+                    const seconds = parseInt(match[3]);
+                    
+                    if (jsonMapping[rawName]) {
+                        const mappedKey = jsonMapping[rawName].key;
+                        times[mappedKey] = formatSeconds(seconds);
+                        dataFound = true;
+                    }
+                });
+
+                if (dataFound) {
+                    athletes.push({ 
+                        id: Date.now(), 
+                        name: name, 
+                        event: eventName || "Bilinmeyen Yarış", // Yıl ve şehir burada
+                        times: times 
+                    });
+                    renderTable();
+                    log(`Başarılı! Sporcu eklendi.`, "success");
+                    document.getElementById('urlInput').value = "";
+                } else {
+                    throw new Error("Veri formatı tanınamadı veya boş.");
+                }
+
+            } catch (err) {
+                console.error(err);
+                log(`HATA: ${err.message}. Linki kontrol edin.`, "error");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fas fa-bolt"></i> <span class="md:inline">ANALİZ ET</span>`;
             }
+        }
 
-            // Reset UI
-            btn.innerHTML = `<i class="fas fa-plus"></i> SPORCU EKLE`;
-            btn.disabled = false;
+        // --- UI ---
+
+        function clearAthletes() {
+            athletes = [];
+            renderTable();
+            log("Liste temizlendi.", "info");
         }
 
         function removeAthlete(id) {
-            const index = athletes.findIndex(a => a.id === id);
-            if (index > -1) {
-                athletes.splice(index, 1);
-                renderAthletes();
-                renderTable();
-            }
-        }
-
-        function renderAthletes() {
-            const list = document.getElementById('athletesList');
-            list.innerHTML = athletes.map(a => `
-                <div class="bg-slate-700 px-4 py-2 rounded-full flex items-center gap-3 border border-slate-600 shadow-lg animate-fade-in">
-                    <span class="font-bold text-white">${a.name}</span>
-                    <button onclick="removeAthlete(${a.id})" class="text-gray-400 hover:text-red-400">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-            `).join('');
-            
-            document.getElementById('comparisonContainer').classList.remove('hidden');
-            if (athletes.length === 0) document.getElementById('comparisonContainer').classList.add('hidden');
+            athletes = athletes.filter(a => a.id !== id);
+            renderTable();
         }
 
         function renderTable() {
-            const thead = document.querySelector('thead tr');
+            const tableContainer = document.getElementById('tableContainer');
+            const tableHeaderRow = document.getElementById('tableHeaderRow');
             const tbody = document.getElementById('comparisonBody');
+            const chipsContainer = document.getElementById('athletesChips');
 
-            // 1. Rebuild Header
-            let headerHtml = `<th class="p-4 w-48 sticky left-0 bg-slate-800 z-10 border-r border-slate-700 border-b">İstasyon</th>`;
+            if (athletes.length === 0) {
+                tableContainer.classList.add('hidden');
+                chipsContainer.innerHTML = "";
+                return;
+            }
+            tableContainer.classList.remove('hidden');
+
+            // 1. Render Chips (Mobil uyumlu kartlar)
+            chipsContainer.innerHTML = athletes.map(a => `
+                <div class="bg-slate-800 text-gray-200 px-3 py-2 rounded-lg border border-slate-600 flex items-center gap-3 shadow-lg animate-fade-in transition-transform hover:scale-105 min-w-[150px]">
+                    <span class="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6] shrink-0"></span>
+                    <div class="flex flex-col overflow-hidden">
+                        <span class="font-bold text-sm leading-tight truncate">${a.name}</span>
+                        <span class="text-[10px] text-yellow-500/80 uppercase truncate">${a.event}</span>
+                    </div>
+                    <button onclick="removeAthlete(${a.id})" class="text-slate-500 hover:text-red-400 transition-colors ml-auto">
+                        <i class="fas fa-times-circle"></i>
+                    </button>
+                </div>
+            `).join('');
+
+            // 2. Render Headers
+            let headerHtml = `
+                <th class="p-3 md:p-4 w-48 border-b border-slate-600 sticky-col bg-slate-900 shadow-[4px_0_15px_rgba(0,0,0,0.5)] text-yellow-500 z-30">
+                    <div class="flex items-center gap-2"><i class="fas fa-dumbbell"></i> İSTASYON</div>
+                </th>`;
+            
             athletes.forEach(a => {
-                headerHtml += `<th class="p-4 text-center border-b border-slate-700 min-w-[150px] font-sport text-lg tracking-wide">${a.name}</th>`;
+                headerHtml += `
+                    <th class="p-3 md:p-4 text-center border-b border-slate-700 min-w-[180px] bg-slate-800/90 relative group align-top">
+                        <div class="flex flex-col items-center gap-1">
+                            <div class="text-white font-sport text-2xl tracking-wide leading-none">${a.name}</div>
+                            <div class="text-yellow-500/80 font-sans text-xs md:text-sm font-bold tracking-wider mt-1 uppercase bg-slate-900/50 px-2 py-0.5 rounded border border-yellow-500/20">${a.event}</div>
+                            <button onclick="removeAthlete(${a.id})" class="absolute top-2 right-2 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </th>`;
             });
-            thead.innerHTML = headerHtml;
+            tableHeaderRow.innerHTML = headerHtml;
 
-            // 2. Rebuild Body
+            // 3. Render Rows
             let bodyHtml = "";
+            stationOrder.forEach((stationKey, index) => {
+                let stationInfo = null;
+                for (const key in jsonMapping) {
+                    if (jsonMapping[key].key === stationKey) {
+                        stationInfo = jsonMapping[key];
+                        break;
+                    }
+                }
+                if (!stationInfo) return;
 
-            stations.forEach(station => {
-                // Determine winner (fastest time) for this station
+                // En iyi (minSec) süreyi bul
                 let minSec = Infinity;
                 athletes.forEach(a => {
-                    const s = timeToSeconds(a.times[station.key]);
+                    const s = timeToSeconds(a.times[stationKey]);
                     if (s < minSec) minSec = s;
                 });
 
-                bodyHtml += `<tr class="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">`;
+                const rowClass = index % 2 === 0 ? "bg-slate-800/30" : "bg-transparent";
+
+                bodyHtml += `<tr class="border-b border-slate-700/50 hover:bg-slate-700/50 transition-colors ${rowClass}">`;
                 
-                // Station Label
+                // İstasyon Adı
                 bodyHtml += `
-                    <td class="p-4 sticky left-0 bg-slate-800 z-10 border-r border-slate-700 font-medium flex items-center gap-3">
-                        <div class="w-8 h-8 rounded bg-slate-700 text-yellow-500 flex items-center justify-center shrink-0">
-                            <i class="fas ${station.icon}"></i>
+                    <td class="p-3 md:p-4 sticky-col border-r border-slate-700/50 font-medium flex items-center gap-2 md:gap-3 bg-slate-900/95 backdrop-blur shadow-[4px_0_10px_rgba(0,0,0,0.5)]">
+                        <div class="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-slate-700/50 border border-slate-600 text-yellow-500 flex items-center justify-center shrink-0 shadow-inner">
+                            <i class="fas ${stationInfo.icon} text-base md:text-lg"></i>
                         </div>
-                        <span class="${station.key === 'Total' ? 'text-yellow-400 font-bold' : 'text-gray-300'}">${station.label}</span>
+                        <span class="text-gray-300 font-bold tracking-wide text-xs md:text-sm whitespace-nowrap">${stationInfo.label}</span>
                     </td>
                 `;
 
-                // Athlete Times
+                // Sporcu Verileri
                 athletes.forEach(a => {
-                    const timeStr = a.times[station.key];
+                    const timeStr = a.times[stationKey] || "-";
                     const seconds = timeToSeconds(timeStr);
                     const isWinner = (seconds === minSec && seconds !== Infinity && athletes.length > 1);
                     
-                    // Visual Bar Calculation (relative to 10 mins or max time)
-                    // For visualization, let's say max usually 10 mins (600s) for stations, 90m for total
-                    const maxRef = station.key === 'Total' ? 5400 : 600; 
-                    const percent = Math.min(100, Math.max(0, (seconds / maxRef) * 100));
+                    // Fark Hesaplama
+                    let diffHtml = "";
+                    if (!isWinner && seconds !== Infinity && minSec !== Infinity) {
+                        const diff = seconds - minSec;
+                        diffHtml = `<div class="text-rose-400 text-[10px] md:text-xs font-bold mt-1 bg-rose-900/30 px-2 py-0.5 rounded-full inline-block">${formatDiff(diff)}</div>`;
+                    }
+
+                    // Bar Hesaplama
+                    let percent = 0;
+                    if (seconds !== Infinity && minSec !== Infinity) {
+                         percent = (minSec / seconds) * 100;
+                    }
                     
+                    const barColor = isWinner ? 'bg-green-500' : 'bg-rose-500';
+                    const barOpacity = isWinner ? 'opacity-100' : 'opacity-60';
+
                     bodyHtml += `
-                        <td class="p-4 text-center ${isWinner ? 'winner-cell' : ''}">
-                            <div class="text-xl font-sport tracking-wide">${timeStr}</div>
+                        <td class="p-3 md:p-4 text-center align-middle">
+                            <div class="inline-block px-3 md:px-4 py-1.5 md:py-2 rounded-lg ${isWinner ? 'winner-cell' : 'loser-cell'} transition-all duration-300 w-28 md:w-32">
+                                <div class="text-xl md:text-2xl font-sport tracking-wide leading-none ${isWinner ? 'text-green-400' : 'text-white'}">${timeStr}</div>
+                                ${isWinner ? '<div class="text-[9px] md:text-[10px] uppercase tracking-widest mt-1 text-green-400 font-bold">LİDER</div>' : diffHtml}
+                            </div>
+                            
                             ${timeStr !== '-' ? `
-                                <div class="w-full bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden opacity-50">
-                                    <div class="${isWinner ? 'bg-green-500' : 'bg-yellow-500'}" style="width: ${percent}%; height: 100%"></div>
+                                <div class="w-20 md:w-24 bg-slate-700/50 h-1.5 rounded-full mt-2 md:mt-3 mx-auto overflow-hidden">
+                                    <div class="${barColor} ${barOpacity} h-full rounded-full transition-all duration-500" style="width: ${percent}%"></div>
                                 </div>
                             ` : ''}
-                            ${isWinner ? '<div class="text-[10px] mt-1 text-green-400 uppercase tracking-wider font-bold">En Hızlı</div>' : ''}
                         </td>
                     `;
                 });
-
                 bodyHtml += `</tr>`;
             });
-
             tbody.innerHTML = bodyHtml;
         }
     </script>
