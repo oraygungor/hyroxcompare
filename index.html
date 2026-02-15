@@ -116,31 +116,60 @@
         function parseHtml(html, sourceUrl) {
             const data = {};
             
-            // 1. Try to find Athlete Name
-            // Usually in title: <title>HYROX race analysis for Oray Gungor at...</title>
-            const titleMatch = html.match(/<title>(.*?)<\/title>/i);
+            // HTML'i DOM olarak parse et
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, "text/html");
+
+            // 1. İsim Çekme (H1 etiketi en güvenilir yerdir)
             let name = "Sporcu " + (athletes.length + 1);
-            if (titleMatch) {
-                const parts = titleMatch[1].split(' at ');
-                if (parts.length > 0) {
-                    name = parts[0].replace('HYROX race analysis for ', '').trim();
+            const h1 = doc.querySelector('h1');
+            if (h1) {
+                name = h1.textContent.trim();
+            } else {
+                // Fallback: Title
+                const titleMatch = html.match(/<title>(.*?)<\/title>/i);
+                if (titleMatch) {
+                    const parts = titleMatch[1].split(' at ');
+                    if (parts.length > 0) {
+                        name = parts[0].replace('HYROX race analysis for ', '').trim();
+                    }
                 }
             }
 
-            // 2. Extract Times using Regex logic similar to Python script
+            // 2. Yarış Yeri/Yılı Çekme (Breadcrumb)
+            let eventName = "";
+            
+            // "/event/" ile başlayan ama içinde "?" (season linki) olmayan linki bul
+            const eventLink = Array.from(doc.querySelectorAll('a[href^="/event/"]'))
+                                   .find(a => !a.getAttribute('href').includes('?'));
+            
+            if (eventLink) {
+                // "Istanbul<!-- --> <!-- -->2026" gibi yapıları textContent temizler -> "Istanbul  2026"
+                eventName = eventLink.textContent.replace(/\s+/g, ' ').trim();
+            } else {
+                // Fallback: Title içinden bulmaya çalış
+                // "HYROX race analysis for Oray Gungor at Istanbul, Feb 13–14 • HYRESULT"
+                const titleContent = doc.querySelector('title')?.textContent || "";
+                const parts = titleContent.split(' at ');
+                if (parts.length > 1) {
+                    // "Istanbul, Feb 13–14 • HYRESULT"
+                    eventName = parts[1].split('•')[0].trim();
+                }
+            }
+
+            // Görünen isim: "Oray Gungor (Istanbul 2026)"
+            const displayName = eventName ? `${name} (${eventName})` : name;
+
+            // 3. Süreleri Çekme (Regex ile - Raw HTML üzerinden devam ediyoruz çünkü en sağlam yöntem bu)
             stations.forEach(station => {
-                // Regex: Station Name + up to 800 chars + Time Format
-                // We look for patterns like: >04:19< or "04:19"
                 const escapedKey = station.key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                 
-                // Find index of station
                 const regexStation = new RegExp(escapedKey, 'i');
                 const matchStation = html.match(regexStation);
                 
                 if (matchStation) {
                     const snippet = html.substring(matchStation.index, matchStation.index + 1200);
                     
-                    // Find all time-like strings in the snippet
                     const timeRegex = /(?:\>|\s|")(\d{1,2}:\d{2}(?::\d{2})?)(?:\<|\s|")/g;
                     let timeMatch;
                     const candidates = [];
@@ -149,22 +178,14 @@
                         candidates.push(timeMatch[1]);
                     }
 
-                    // Smart Filter
                     let bestTime = "-";
                     let minValidSeconds = Infinity;
 
                     for (const t of candidates) {
                         const sec = timeToSeconds(t);
-                        // Filter logic:
-                        // < 10 seconds: likely a diff
-                        // > 3600 seconds (1 hour): likely Start Time (except for Total)
-                        // For Total time, we allow > 1 hour.
-                        
-                        const maxLimit = (station.key === "Total") ? 10800 : 3600; // 3 hours for total, 1 hour for splits
+                        const maxLimit = (station.key === "Total") ? 10800 : 3600; 
                         
                         if (sec > 10 && sec < maxLimit) {
-                            // We prefer the *first* valid logical duration found usually,
-                            // OR for duplicate valid ones, usually the raw time is consistent.
                             if (bestTime === "-") {
                                 bestTime = t;
                                 minValidSeconds = sec;
@@ -177,7 +198,7 @@
                 }
             });
 
-            return { name, times: data, url: sourceUrl, id: Date.now() };
+            return { name: displayName, times: data, url: sourceUrl, id: Date.now() };
         }
 
         async function addAthlete() {
@@ -241,7 +262,7 @@
             // 1. Rebuild Header
             let headerHtml = `<th class="p-4 w-48 sticky left-0 bg-slate-800 z-10 border-r border-slate-700 border-b">İstasyon</th>`;
             athletes.forEach(a => {
-                headerHtml += `<th class="p-4 text-center border-b border-slate-700 min-w-[150px]">${a.name}</th>`;
+                headerHtml += `<th class="p-4 text-center border-b border-slate-700 min-w-[150px] font-sport text-lg tracking-wide">${a.name}</th>`;
             });
             thead.innerHTML = headerHtml;
 
